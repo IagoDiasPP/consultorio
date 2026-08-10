@@ -1,6 +1,7 @@
 package com.consultorio.dto.patient;
 
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,8 +15,10 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class PatientUpdateDto {
 
+    @NotBlank
     private String name;
 
+    @NotBlank
     private String phone;
 
     private LocalDate birthDate;
