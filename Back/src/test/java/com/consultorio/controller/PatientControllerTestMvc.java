@@ -41,7 +41,7 @@ class PatientControllerTestMvc {
     @Test
     void shouldCreatePatient() throws Exception {
 
-        Patient patient = PatientCreate.patientCreatValid();
+        Patient patient = PatientCreate.creatPatientValid();
         PatientCreateDto patientDto = PatientDtoCreate.patientCreatDtoValid();
 
         BDDMockito.when(patientService.save(patientDto))
@@ -61,7 +61,7 @@ class PatientControllerTestMvc {
     @Test
     void shouldReturnPageOfPatients() throws Exception {
 
-        Patient patient = PatientCreate.patientCreatValid();
+        Patient patient = PatientCreate.creatPatientValid();
         Page<Patient> patients = new PageImpl<>(List.of(patient));
 
         BDDMockito.when(patientService.findAll(ArgumentMatchers.any(Pageable.class)))
@@ -82,7 +82,7 @@ class PatientControllerTestMvc {
     @Test
     void shouldReturnPatientById() throws Exception {
 
-        Patient patient = PatientCreate.patientCreatValid();
+        Patient patient = PatientCreate.creatPatientValid();
         Long id = patient.getId();
 
         BDDMockito.when(patientService.findByIdOrThrowRequestException(id))
@@ -100,7 +100,7 @@ class PatientControllerTestMvc {
     @Test
     void shouldReturnPatientsByName() throws Exception {
 
-        Patient patient = PatientCreate.patientCreatValid();
+        Patient patient = PatientCreate.creatPatientValid();
         String name = patient.getName();
 
         List<Patient> patients = List.of(patient);
@@ -121,7 +121,7 @@ class PatientControllerTestMvc {
     @Test
     void shouldUpdatePatient() throws Exception {
 
-        Patient patient = PatientCreate.patientCreatValid();
+        Patient patient = PatientCreate.creatPatientValid();
         Long id = patient.getId();
 
         PatientUpdateDto patientDto = PatientDtoCreate.patientUpdateDtoValid();

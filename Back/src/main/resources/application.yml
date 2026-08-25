@@ -4,7 +4,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3308/patient?createDatabaseIfNotExist=true
+    url: jdbc:mysql://localhost:3312/patient?createDatabaseIfNotExist=true
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver   # <-- adicionar
