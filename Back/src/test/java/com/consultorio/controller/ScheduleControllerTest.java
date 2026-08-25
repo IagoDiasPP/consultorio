@@ -13,7 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-
+import com.consultorio.dto.schedule.ScheduleResponseDto;
 import java.time.DayOfWeek;
 import java.util.List;
 
@@ -58,7 +58,11 @@ class ScheduleControllerTest {
     void shouldReturnAllSchedules() throws Exception {
 
         Schedule schedule = ScheduleCreate.creatScheduleValid();
-        List<Schedule> schedules = List.of(schedule);
+
+        ScheduleResponseDto responseDto = new ScheduleResponseDto();
+        responseDto.setId(schedule.getId());
+
+        List<ScheduleResponseDto> schedules = List.of(responseDto);
 
         BDDMockito.when(scheduleService.findAll())
                 .thenReturn(schedules);

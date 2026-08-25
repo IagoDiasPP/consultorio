@@ -20,6 +20,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.mockito.junit.jupiter.MockitoExtension;
+import static org.mockito.ArgumentMatchers.anyList;
 
 import java.util.List;
 import java.util.Optional;
@@ -27,7 +29,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 
-@ExtendWith(SpringExtension.class)
+@ExtendWith(MockitoExtension.class)
 class AppointmentServiceTest {
 
     @InjectMocks
@@ -55,7 +57,7 @@ class AppointmentServiceTest {
     SpecialtyRepository specialtyRepository;
 
     @Test
-    void save_ReturnsConfirmedAppointment_WhenDoctorAvailable() {
+    void save_ReturnsPendingAppointment_WhenDoctorAvailable() {
 
         // Arrange
         AppointmentCreateDto dto =
@@ -98,10 +100,11 @@ class AppointmentServiceTest {
 
         BDDMockito.when(
                         appointmentRepository
-                                .existsByDoctorAndDateAndStartTime(
+                                .existsByDoctorAndDateAndStartTimeAndStatusIn(
                                         any(),
                                         any(),
-                                        any()
+                                        any(),
+                                        anyList()
                                 )
                 )
                 .thenReturn(false);
@@ -128,14 +131,11 @@ class AppointmentServiceTest {
                 .isEqualTo(1L);
 
         Assertions.assertThat(appointmentSaved.getStatus())
-                .isEqualTo(AppointmentStatus.CONFIRMED);
+                .isEqualTo(AppointmentStatus.PENDING);
 
         Assertions.assertThat(appointmentSaved.getDoctor())
                 .isEqualTo(doctor);
 
-        BDDMockito.then(callListRepository)
-                .should()
-                .save(any(CallList.class));
     }
 
     @Test
@@ -182,10 +182,11 @@ class AppointmentServiceTest {
 
         BDDMockito.when(
                         appointmentRepository
-                                .existsByDoctorAndDateAndStartTime(
+                                .existsByDoctorAndDateAndStartTimeAndStatusIn(
                                         any(),
                                         any(),
-                                        any()
+                                        any(),
+                                        anyList()
                                 )
                 )
                 .thenReturn(true);
@@ -260,10 +261,11 @@ class AppointmentServiceTest {
 
         BDDMockito.when(
                         appointmentRepository
-                                .existsByDoctorAndDateAndStartTime(
+                                .existsByDoctorAndDateAndStartTimeAndStatusIn(
                                         any(),
                                         any(),
-                                        any()
+                                        any(),
+                                        anyList()
                                 )
                 )
                 .thenReturn(false);
@@ -273,7 +275,7 @@ class AppointmentServiceTest {
 
         // Assert
         Assertions.assertThat(appointment.getStatus())
-                .isEqualTo(AppointmentStatus.CONFIRMED);
+                .isEqualTo(AppointmentStatus.PENDING);
 
         BDDMockito.then(appointmentRepository)
                 .should()

@@ -37,7 +37,7 @@ class SpecialtyControllerTest {
     @Test
     void shouldCreateSpecialty() throws Exception {
 
-        Specialty specialty = SpecialtyCreate.specialtyCreat();
+        Specialty specialty = SpecialtyCreate.creatSpecialtyValid();
         SpecialtyCreateDto dto = SpecialtyDtoCreate.creatSpecialtyDtoValid();
 
         BDDMockito.when(specialtyService.save(dto))
@@ -57,7 +57,7 @@ class SpecialtyControllerTest {
     @Test
     void shouldReturnAllSpecialties() throws Exception {
 
-        Specialty specialty = SpecialtyCreate.specialtyCreat();
+        Specialty specialty = SpecialtyCreate.creatSpecialtyValid();
         List<Specialty> specialties = List.of(specialty);
 
         BDDMockito.when(specialtyService.listAll())
@@ -75,7 +75,7 @@ class SpecialtyControllerTest {
     @Test
     void shouldReturnSpecialtyById() throws Exception {
 
-        Specialty specialty = SpecialtyCreate.specialtyCreat();
+        Specialty specialty = SpecialtyCreate.creatSpecialtyValid();
         Long id = specialty.getId();
 
         BDDMockito.when(specialtyService.findByIdOrThrowRequestException(id))
@@ -93,7 +93,7 @@ class SpecialtyControllerTest {
     @Test
     void shouldUpdateSpecialty() throws Exception {
 
-        Specialty specialty = SpecialtyCreate.specialtyCreat();
+        Specialty specialty = SpecialtyCreate.creatSpecialtyValid();
         Long id = specialty.getId();
 
         SpecialtyUpdateDto dto = SpecialtyDtoCreate.creatSpecialtyUpdateDtoValid();

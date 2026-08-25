@@ -19,7 +19,7 @@ import org.mockito.BDDMockito;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
-
+import com.consultorio.dto.schedule.ScheduleResponseDto;
 import java.time.DayOfWeek;
 import java.util.List;
 import java.util.Optional;
@@ -142,7 +142,7 @@ class ScheduleServiceTest {
                 .thenReturn(schedules);
 
         // Act
-        List<Schedule> result =
+        List<ScheduleResponseDto> result =
                 scheduleService.findAll();
 
         // Assert
@@ -150,15 +150,13 @@ class ScheduleServiceTest {
                 .isNotEmpty()
                 .hasSize(1);
 
-        Assertions.assertThat(result.get(0))
-                .usingRecursiveComparison()
-                .isEqualTo(schedule);
+        Assertions.assertThat(result.get(0).getId())
+                .isEqualTo(schedule.getId());
 
         BDDMockito.then(scheduleRepository)
                 .should()
                 .findAll();
     }
-
     @Test
     void findByIdOrThrowRequestException_ReturnsSchedule_WhenSuccessful() {
 
