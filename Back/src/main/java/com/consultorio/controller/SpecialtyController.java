@@ -15,7 +15,6 @@ import java.util.List;
 
 @AllArgsConstructor
 @RestController
-@CrossOrigin(origins = "https://consultorio-frontend-ypmt.onrender.com")
 @RequestMapping("/specialties")
 public class SpecialtyController {
 
