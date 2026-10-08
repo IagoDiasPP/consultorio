@@ -1,49 +1,21 @@
 import { useEffect, useState } from "react"
 import api from "../services/api"
-import axios from "axios"
 
 function AgendaMedico() {
+
+  const [mesAtual, setMesAtual] = useState(new Date())
 
   const [medicos, setMedicos] = useState([])
 
   const [doctorId, setDoctorId] = useState("")
 
-  const [diaSelecionado, setDiaSelecionado] = useState("MONDAY")
+  const [dataSelecionada, setDataSelecionada] = useState("")
 
   const [slots, setSlots] = useState([])
 
   const [slotSelecionado, setSlotSelecionado] = useState(null)
 
-  const diasSemana = [
-    {
-      label: "Segunda",
-      value: "MONDAY"
-    },
-    {
-      label: "Terça",
-      value: "TUESDAY"
-    },
-    {
-      label: "Quarta",
-      value: "WEDNESDAY"
-    },
-    {
-      label: "Quinta",
-      value: "THURSDAY"
-    },
-    {
-      label: "Sexta",
-      value: "FRIDAY"
-    },
-    {
-      label: "Sábado",
-      value: "SATURDAY"
-    },
-    {
-      label: "Domingo",
-      value: "SUNDAY"
-    }
-  ]
+
 
   useEffect(() => {
 
@@ -52,34 +24,24 @@ function AgendaMedico() {
   }, [])
 
   useEffect(() => {
-
-    if (doctorId) {
-
+    if (doctorId && dataSelecionada) {
       carregarSlots()
-
     }
-
-  }, [doctorId, diaSelecionado])
+  }, [doctorId, dataSelecionada])
 
   async function remarcarConsulta(id) {
-
-  await axios.put(
-    `http://localhost:8080/appointments/${id}/remarcar`
-  )
-
-  await carregarSlots()
-
-  setSlotSelecionado(null)
-}
+    await api.put(
+      `/appointments/${id}/remarcar`
+    )
+    await carregarSlots()
+    setSlotSelecionado(null)
+  }
 
 async function darAlta(id) {
-
-  await axios.put(
-    `http://localhost:8080/appointments/${id}/alta`
+  await api.put(
+    `/appointments/${id}/alta`
   )
-
   await carregarSlots()
-
   setSlotSelecionado(null)
 }
 
@@ -101,23 +63,64 @@ async function darAlta(id) {
   }
 
   function carregarSlots() {
-
     api.get(
-      `/appointments/doctor-slots?doctorId=${doctorId}&dayOfWeek=${diaSelecionado}`
+      `/appointments/doctor-slots?doctorId=${doctorId}&date=${dataSelecionada}`
     )
-
       .then(response => {
-
         setSlots(response.data)
-
       })
-
       .catch(error => {
-
         console.log(error)
-
       })
   }
+
+function mudarMes(valor) {
+  setMesAtual(
+    new Date(
+      mesAtual.getFullYear(),
+      mesAtual.getMonth() + valor,
+      1
+    )
+  )
+}
+
+function gerarDiasDoMes() {
+  const ano = mesAtual.getFullYear()
+  const mes = mesAtual.getMonth()
+
+  const primeiroDia = new Date(ano, mes, 1)
+  const ultimoDia = new Date(ano, mes + 1, 0)
+
+  const dias = []
+
+  for (let i = 0; i < primeiroDia.getDay(); i++) {
+    dias.push(null)
+  }
+
+  for (let dia = 1; dia <= ultimoDia.getDate(); dia++) {
+    dias.push(
+      new Date(ano, mes, dia)
+    )
+  }
+
+  return dias
+}
+
+function selecionarData(data) {
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, "0")
+  const dia = String(data.getDate()).padStart(2, "0")
+
+  setDataSelecionada(`${ano}-${mes}-${dia}`)
+}
+
+function formatarData(data) {
+  const ano = data.getFullYear()
+  const mes = String(data.getMonth() + 1).padStart(2, "0")
+  const dia = String(data.getDate()).padStart(2, "0")
+
+  return `${ano}-${mes}-${dia}`
+}
 
   return (
 
@@ -135,9 +138,25 @@ async function darAlta(id) {
 
         <select
           value={doctorId}
-          onChange={(e) =>
-            setDoctorId(e.target.value)
-          }
+          onChange={(e) => {
+            const id = e.target.value
+
+            setDoctorId(id)
+
+            if (id) {
+              const hoje = new Date()
+
+              setMesAtual(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
+
+              const ano = hoje.getFullYear()
+              const mes = String(hoje.getMonth() + 1).padStart(2, "0")
+              const dia = String(hoje.getDate()).padStart(2, "0")
+
+              setDataSelecionada(`${ano}-${mes}-${dia}`)
+            } else {
+              setDataSelecionada("")
+            }
+          }}
           className="border p-4 rounded-xl w-full"
         >
 
@@ -166,32 +185,74 @@ async function darAlta(id) {
 
           <>
 
-            <div className="flex gap-3 mb-8 flex-wrap">
+            <div className="bg-white p-6 rounded-2xl shadow mb-8">
 
-              {
-                diasSemana.map(dia => (
+              <div className="flex justify-between items-center mb-6">
 
-                  <button
-                    key={dia.value}
-                    onClick={() =>
-                      setDiaSelecionado(dia.value)
-                    }
-                    className={
-                      diaSelecionado === dia.value
-                        ? "bg-blue-600 text-white px-5 py-3 rounded-xl"
-                        : "bg-white px-5 py-3 rounded-xl shadow"
-                    }
-                  >
+                <button
+                  onClick={() => mudarMes(-1)}
+                  className="px-4 py-2 bg-gray-200 rounded-xl"
+                >
+                  ←
+                </button>
 
-                    {dia.label}
+                <h2 className="text-xl font-bold">
+                  {mesAtual.toLocaleDateString("pt-BR", {
+                    month: "long",
+                    year: "numeric"
+                  })}
+                </h2>
 
-                  </button>
-                ))
-              }
+                <button
+                  onClick={() => mudarMes(1)}
+                  className="px-4 py-2 bg-gray-200 rounded-xl"
+                >
+                  →
+                </button>
 
-            </div>
+              </div>
 
+              <div className="grid grid-cols-7 gap-2 mb-2 text-center font-bold">
 
+                <div>Dom</div>
+                <div>Seg</div>
+                <div>Ter</div>
+                <div>Qua</div>
+                <div>Qui</div>
+                <div>Sex</div>
+                <div>Sáb</div>
+
+              </div>
+
+              <div className="grid grid-cols-7 gap-2">
+                {gerarDiasDoMes().map((data, index) => (
+                  <div key={index}>
+                    {data && (
+                      <button
+                        onClick={() => selecionarData(data)}
+                        className={`w-full p-3 rounded-xl hover:bg-gray-200 ${
+                          dataSelecionada === formatarData(data)
+                            ? "bg-blue-600 text-white"
+                            : ""
+                        }`}
+                      >
+                        {data.getDate()}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+            {dataSelecionada && (
+              <div className="mb-4">
+                <h2 className="text-xl font-bold">
+                  Consultas do dia{" "}
+                  {new Date(`${dataSelecionada}T00:00:00`).toLocaleDateString(
+                    "pt-BR"
+                  )}
+                </h2>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
 

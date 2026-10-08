@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.DayOfWeek;
 import com.consultorio.dto.appointment.DoctorSlotResponseDto;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -74,19 +75,16 @@ public class AppointmentController {
         appointmentService.delete(id);
         return ResponseEntity.noContent().build();
     }
+
     @GetMapping("/doctor-slots")
     public ResponseEntity<List<DoctorSlotResponseDto>> getDoctorSlots(
-
             @RequestParam Long doctorId,
-
-            @RequestParam DayOfWeek dayOfWeek
+            @RequestParam LocalDate date
     ) {
-
         return ResponseEntity.ok(
-
                 appointmentService.getDoctorSlots(
                         doctorId,
-                        dayOfWeek
+                        date
                 )
         );
     }

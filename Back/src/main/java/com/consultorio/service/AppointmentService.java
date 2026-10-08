@@ -233,7 +233,7 @@ public class AppointmentService {
 
     public List<DoctorSlotResponseDto> getDoctorSlots(
             Long doctorId,
-            DayOfWeek dayOfWeek
+            LocalDate date
     ) {
 
         Doctor doctor =
@@ -244,11 +244,10 @@ public class AppointmentService {
 
         List<DoctorSlotResponseDto> slots = new ArrayList<>();
 
-        LocalDate data = proximaDataDoDia(dayOfWeek);
 
         for (Schedule schedule : schedules) {
 
-            if (schedule.getDayOfWeek() != dayOfWeek) {
+            if (schedule.getDayOfWeek() != date.getDayOfWeek()) {
                 continue;
             }
 
@@ -276,7 +275,7 @@ public class AppointmentService {
 
                                         doctor,
 
-                                        data,
+                                        date,
 
                                         hora,
 
