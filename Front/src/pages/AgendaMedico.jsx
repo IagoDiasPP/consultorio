@@ -303,6 +303,8 @@ function formatarData(data) {
 
             </div>
 
+            </div>
+
           </>
         )
       }
