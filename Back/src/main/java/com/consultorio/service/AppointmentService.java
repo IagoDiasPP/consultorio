@@ -41,6 +41,7 @@ public class AppointmentService {
     private static final int DURACAO_CONSULTA_MINUTES = 60;
 
 
+
     public Appointment save(AppointmentCreateDto appointmentDto) {
 
         Appointment appointment = new Appointment();
@@ -56,94 +57,129 @@ public class AppointmentService {
                 .orElseThrow();
 
         appointment.setSpecialty(specialty);
-        appointment.setStatus(AppointmentStatus.PENDING);
+        appointment.setStatus(AppointmentStatus.WAITING);
 
-        // salva primeiro
         appointment = appointmentRepository.save(appointment);
 
-        Pageable pageable = PageRequest.of(0, 10);
+        Pageable pageable = PageRequest.of(0, Integer.MAX_VALUE);
+
         tentarMarcarConsulta(appointment, pageable);
 
-        return appointmentRepository.save(appointment);
+        appointment = appointmentRepository.save(appointment);
+
+        if (appointment.getStatus() == AppointmentStatus.PENDING) {
+            criarCallList(appointment);
+        }
+
+        return appointment;
     }
+
+
 
 
     private void tentarMarcarConsulta(Appointment appointment, Pageable pageable) {
 
         Page<Doctor> doctors =
-                doctorService.findBySpecialty(appointment.getSpecialty().getId(), pageable);
+                doctorService.findBySpecialty(
+                        appointment.getSpecialty().getId(),
+                        pageable
+                );
+
+        Doctor melhorMedico = null;
+        LocalDateTime melhorVaga = null;
 
         for (Doctor doctor : doctors) {
 
             Optional<LocalDateTime> vaga =
                     encontrarPrimeiraVagaLivre(doctor);
 
-            if (vaga.isPresent()) {
+            if (vaga.isPresent()
+                    && (melhorVaga == null
+                    || vaga.get().isBefore(melhorVaga))) {
 
-                appointment.setDoctor(doctor);
-
-                appointment.setDate(vaga.get().toLocalDate());
-
-                appointment.setStartTime(vaga.get().toLocalTime());
-
-                appointment.setStatus(AppointmentStatus.PENDING);
-
-                return;
+                melhorVaga = vaga.get();
+                melhorMedico = doctor;
             }
+        }
+
+        if (melhorVaga != null) {
+            appointment.setDoctor(melhorMedico);
+            appointment.setDate(melhorVaga.toLocalDate());
+            appointment.setStartTime(melhorVaga.toLocalTime());
+            appointment.setStatus(AppointmentStatus.PENDING);
+            return;
         }
 
         appointment.setStatus(AppointmentStatus.WAITING);
     }
 
 
+
+
+
     private Optional<LocalDateTime> encontrarPrimeiraVagaLivre(Doctor doctor) {
+        List<Schedule> schedules = scheduleService.findByDoctor(doctor.getId());
 
-        List<Schedule> schedules =
-                scheduleService.findByDoctor(doctor.getId());
+        LocalDate hoje = LocalDate.now();
+        LocalDate fimBusca = hoje.plusWeeks(8);
 
-        for (Schedule schedule : schedules) {
+        return schedules.stream()
+                .flatMap(schedule -> {
+                    LocalDate data = proximaDataDoDia(
+                            schedule.getDayOfWeek(), hoje
+                    );
 
-            LocalDate data =
-                    proximaDataDoDia(schedule.getDayOfWeek());
+                    List<LocalDateTime> horarios = new ArrayList<>();
 
-            LocalTime hora = schedule.getStartTime();
+                    while (!data.isAfter(fimBusca)) {
+                        LocalTime hora = schedule.getStartTime();
 
-            while (hora.isBefore(schedule.getEndTime())) {
+                        while (true) {
+                            LocalTime fimConsulta =
+                                    hora.plusMinutes(DURACAO_CONSULTA_MINUTES);
 
-                boolean ocupado =
+                            if (fimConsulta.isAfter(schedule.getEndTime())) {
+                                break;
+                            }
 
-                        appointmentRepository
-                                .existsByDoctorAndDateAndStartTimeAndStatusIn(
+                            boolean cruzaAlmoco =
+                                    schedule.getBreakStart() != null
+                                            && schedule.getBreakEnd() != null
+                                            && hora.isBefore(schedule.getBreakEnd())
+                                            && fimConsulta.isAfter(schedule.getBreakStart());
 
-                                        doctor,
+                            boolean horarioJaPassou =
+                                    data.equals(hoje)
+                                            && hora.isBefore(LocalTime.now());
 
-                                        data,
+                            if (!cruzaAlmoco && !horarioJaPassou) {
+                                horarios.add(LocalDateTime.of(data, hora));
+                            }
 
-                                        hora,
+                            hora = hora.plusMinutes(DURACAO_CONSULTA_MINUTES);
+                        }
 
-                                        List.of(
+                        data = data.plusWeeks(1);
+                    }
 
-                                                AppointmentStatus.PENDING,
-
-                                                AppointmentStatus.CONFIRMED
-                                        )
-                                );
-
-                if (!ocupado) {
-                    return Optional.of(LocalDateTime.of(data, hora));
-                }
-
-                hora = hora.plusMinutes(DURACAO_CONSULTA_MINUTES);
-            }
-        }
-
-        return Optional.empty();
+                    return horarios.stream();
+                })
+                .sorted()
+                .filter(vaga -> !appointmentRepository
+                        .existsByDoctorAndDateAndStartTimeAndStatusIn(
+                                doctor,
+                                vaga.toLocalDate(),
+                                vaga.toLocalTime(),
+                                List.of(
+                                        AppointmentStatus.PENDING,
+                                        AppointmentStatus.CONFIRMED
+                                )
+                        ))
+                .findFirst();
     }
 
-
-    private LocalDate proximaDataDoDia(DayOfWeek dia) {
-
-        LocalDate data = LocalDate.now();
+    private LocalDate proximaDataDoDia(DayOfWeek dia, LocalDate aPartirDe) {
+        LocalDate data = aPartirDe;
 
         while (data.getDayOfWeek() != dia) {
             data = data.plusDays(1);
@@ -151,6 +187,8 @@ public class AppointmentService {
 
         return data;
     }
+
+
 
 
     private void criarCallList(Appointment appointment) {
@@ -174,15 +212,20 @@ public class AppointmentService {
 
 
     // chamado quando abrir vaga
+
     public void tentarAgendarFila(Pageable pageable) {
 
         List<Appointment> fila =
                 appointmentRepository
-                        .findByStatusOrderByIdAsc(AppointmentStatus.WAITING);
+                        .findByStatusOrderByDataEntradaFilaAsc(
+                                AppointmentStatus.WAITING
+                        );
+
+        Pageable pageableTodos = PageRequest.of(0, Integer.MAX_VALUE);
 
         for (Appointment appointment : fila) {
 
-            tentarMarcarConsulta(appointment, pageable);
+            tentarMarcarConsulta(appointment, pageableTodos);
 
             if (appointment.getStatus() != AppointmentStatus.WAITING) {
 
@@ -195,6 +238,7 @@ public class AppointmentService {
         }
     }
 
+
     public Appointment findByIdOrThrowRequestException(Long id) {
         return appointmentRepository.findById(id)
                 .orElseThrow(() ->
@@ -203,18 +247,89 @@ public class AppointmentService {
 
     public List<Appointment> findWaiting() {
         return appointmentRepository
-                .findByStatusOrderByIdAsc(AppointmentStatus.WAITING);
+                .findByStatusOrderByDataEntradaFilaAsc(
+                        AppointmentStatus.WAITING
+                );
     }
 
-    public Appointment update(Long id, AppointmentUpdateDto dto) {
 
-        Appointment appointment =
-                findByIdOrThrowRequestException(id);
+
+
+
+    public Appointment update(Long id, AppointmentUpdateDto dto) {
+        Appointment appointment = findByIdOrThrowRequestException(id);
+
+        if (appointment.getStatus() == AppointmentStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "Não é possível atualizar uma consulta cancelada."
+            );
+        }
+
+        AppointmentStatus statusAnterior = appointment.getStatus();
+        AppointmentStatus novoStatus = dto.getStatus();
+
+        if (novoStatus == null) {
+            throw new IllegalArgumentException(
+                    "O status da consulta deve ser informado."
+            );
+        }
+
+        // Só permite confirmar uma consulta que já tenha
+        // médico, data e horário definidos.
+        if (novoStatus == AppointmentStatus.CONFIRMED) {
+            if (appointment.getDoctor() == null
+                    || appointment.getDate() == null
+                    || appointment.getStartTime() == null) {
+                throw new IllegalStateException(
+                        "Não é possível confirmar uma consulta sem médico, data e horário."
+                );
+            }
+
+            if (statusAnterior != AppointmentStatus.PENDING
+                    && statusAnterior != AppointmentStatus.CONFIRMED) {
+                throw new IllegalStateException(
+                        "Só é possível confirmar uma consulta pendente."
+                );
+            }
+        }
+
+        // Paciente não confirmou a consulta.
+        if (statusAnterior == AppointmentStatus.PENDING
+                && novoStatus == AppointmentStatus.WAITING) {
+
+            int tentativas = appointment.getTentativasNaoConfirmadas() == null
+                    ? 0
+                    : appointment.getTentativasNaoConfirmadas();
+
+            tentativas++;
+            appointment.setTentativasNaoConfirmadas(tentativas);
+
+            // Segunda falta: cancela e processa a fila.
+            if (tentativas >= 2) {
+                appointment.setStatus(AppointmentStatus.CANCELLED);
+                Appointment cancelada = appointmentRepository.save(appointment);
+
+                tentarAgendarFila(PageRequest.of(0, 10));
+
+                return cancelada;
+            }
+
+            // Primeira falta: devolve ao final da fila.
+            appointment.setStatus(AppointmentStatus.WAITING);
+            appointment.setDataEntradaFila(LocalDateTime.now());
+
+            appointmentRepository.save(appointment);
+
+            tentarAgendarFila(PageRequest.of(0, 10));
+
+            return appointment;
+        }
 
         appointmentMapper.updateFromDto(dto, appointment);
 
         return appointmentRepository.save(appointment);
     }
+
 
     public void delete(Long id) {
 
@@ -253,21 +368,37 @@ public class AppointmentService {
 
             LocalTime hora = schedule.getStartTime();
 
-            while (hora.isBefore(schedule.getEndTime())) {
+
+            while (!hora.plusMinutes(DURACAO_CONSULTA_MINUTES)
+                    .isAfter(schedule.getEndTime())) {
+
 
                 // pula horário de pausa
-                if (
-                        hora.equals(schedule.getBreakStart())
-                                || (
-                                hora.isAfter(schedule.getBreakStart())
-                                        && hora.isBefore(schedule.getBreakEnd())
-                        )
-                ) {
 
+                boolean cruzaAlmoco =
+                        schedule.getBreakStart() != null
+                                && schedule.getBreakEnd() != null
+                                && hora.isBefore(schedule.getBreakEnd())
+                                && hora.plusMinutes(DURACAO_CONSULTA_MINUTES)
+                                .isAfter(schedule.getBreakStart());
+
+
+                if (cruzaAlmoco) {
                     hora = hora.plusMinutes(DURACAO_CONSULTA_MINUTES);
-
                     continue;
                 }
+
+                boolean horarioJaPassou =
+                        date.isBefore(LocalDate.now())
+                                || (date.equals(LocalDate.now())
+                                && !hora.isAfter(LocalTime.now()));
+
+                if (horarioJaPassou) {
+                    hora = hora.plusMinutes(DURACAO_CONSULTA_MINUTES);
+                    continue;
+                }
+
+
 
                 Appointment appointment =
                         appointmentRepository
@@ -340,23 +471,90 @@ public class AppointmentService {
 
     }
 
+
+
+
     public Appointment remarcarProximaSemana(Long id) {
+        Appointment appointment = findByIdOrThrowRequestException(id);
 
-        Appointment appointment =
-                findByIdOrThrowRequestException(id);
+        if (appointment.getStatus() == AppointmentStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "Não é possível remarcar uma consulta cancelada."
+            );
+        }
 
-        appointment.setDate(
-                appointment.getDate().plusWeeks(1)
-        );
+        Doctor doctor = appointment.getDoctor();
 
-        appointment.setStatus(
-                AppointmentStatus.PENDING
-        );
+        if (doctor == null || appointment.getDate() == null
+                || appointment.getStartTime() == null) {
+            throw new IllegalStateException(
+                    "A consulta precisa ter médico, data e horário para ser remarcada."
+            );
+        }
+
+        LocalDate novaData = appointment.getDate().plusWeeks(1);
+
+        // Impede remarcação para uma data que já passou.
+        if (novaData.isBefore(LocalDate.now())) {
+            throw new IllegalStateException(
+                    "Não é possível remarcar a consulta para uma data passada."
+            );
+        }
+
+        List<Schedule> schedules =
+                scheduleService.findByDoctor(doctor.getId());
+
+        schedules.stream()
+                .filter(schedule ->
+                        schedule.getDayOfWeek() == novaData.getDayOfWeek())
+                .filter(schedule ->
+                        !appointment.getStartTime().isBefore(schedule.getStartTime()))
+                .filter(schedule ->
+                        !appointment.getStartTime()
+                                .plusMinutes(DURACAO_CONSULTA_MINUTES)
+                                .isAfter(schedule.getEndTime()))
+                .filter(schedule -> {
+                    LocalTime fimConsulta = appointment.getStartTime()
+                            .plusMinutes(DURACAO_CONSULTA_MINUTES);
+
+                    return schedule.getBreakStart() == null
+                            || schedule.getBreakEnd() == null
+                            || !(appointment.getStartTime()
+                            .isBefore(schedule.getBreakEnd())
+                            && fimConsulta.isAfter(schedule.getBreakStart()));
+                })
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "O horário original não está disponível na escala do médico na próxima semana."
+                ));
+
+        boolean horarioOcupado =
+                appointmentRepository.existsByDoctorAndDateAndStartTimeAndStatusIn(
+                        doctor,
+                        novaData,
+                        appointment.getStartTime(),
+                        List.of(
+                                AppointmentStatus.PENDING,
+                                AppointmentStatus.CONFIRMED
+                        )
+                );
+
+        if (horarioOcupado) {
+            throw new IllegalStateException(
+                    "O médico já possui uma consulta nesse horário na próxima semana."
+            );
+        }
+
+        appointment.setDate(novaData);
+        appointment.setStatus(AppointmentStatus.PENDING);
 
         criarCallList(appointment);
 
         return appointmentRepository.save(appointment);
     }
+
+
+
 
     public Appointment darAlta(Long id) {
 

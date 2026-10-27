@@ -13,6 +13,10 @@ import java.util.Optional;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
+    List<Appointment> findByStatusOrderByDataEntradaFilaAsc(
+            AppointmentStatus status
+    );
+
     boolean existsByDoctorAndDateAndStartTime(
             Doctor doctor,
             LocalDate date,

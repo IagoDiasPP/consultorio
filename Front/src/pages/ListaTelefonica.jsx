@@ -68,42 +68,26 @@ function ListaTelefonica() {
       })
   }
 
-  function cancelarConsulta(consulta) {
 
-    api.put(
+function cancelarConsulta(consulta) {
+  api.put(
+    `/appointments/${consulta.id}`,
+    {
+      status: "WAITING"
+    }
+  )
+    .then(() => {
+      carregarLista();
 
-      `/appointments/${consulta.id}`,
+      alert("Paciente devolvido à fila de espera!");
+    })
+    .catch(error => {
+      console.log(error);
 
-      {
-        status: "CANCELLED"
-      }
+      alert("Erro ao atualizar a situação do paciente");
+    });
+}
 
-    )
-
-      .then(() => {
-
-        api.post(
-          "/appointments/process-queue"
-        )
-
-        carregarLista()
-
-        alert(
-          "Consulta cancelada!"
-        )
-
-      })
-
-      .catch(error => {
-
-        console.log(error)
-
-        alert(
-          "Erro ao cancelar consulta"
-        )
-
-      })
-  }
 
   return (
 

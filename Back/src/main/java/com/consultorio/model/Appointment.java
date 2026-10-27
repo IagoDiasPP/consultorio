@@ -4,9 +4,12 @@ import com.consultorio.enums.AppointmentStatus;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
+import jakarta.persistence.Column;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
+import jakarta.persistence.PrePersist;
 
 @Entity
 @Table(name = "appointments")
@@ -42,4 +45,17 @@ public class Appointment {
 
     @Enumerated(EnumType.STRING)
     private AppointmentStatus status;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer tentativasNaoConfirmadas = 0;
+
+    private LocalDateTime dataEntradaFila;
+
+    @PrePersist
+    public void inicializarDataEntradaFila() {
+        if (dataEntradaFila == null) {
+            dataEntradaFila = LocalDateTime.now();
+        }
+    }
 }
