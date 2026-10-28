@@ -52,6 +52,12 @@ public class Appointment {
 
     private LocalDateTime dataEntradaFila;
 
+    private LocalDate disponivelParaReagendamentoEm;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer prioridadeFila = 1;
+
     @PrePersist
     public void inicializarDataEntradaFila() {
         if (dataEntradaFila == null) {

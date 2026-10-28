@@ -23,6 +23,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -79,24 +80,24 @@ public class AppointmentService {
 
     private void tentarMarcarConsulta(Appointment appointment, Pageable pageable) {
 
-        Page<Doctor> doctors =
-                doctorService.findBySpecialty(
-                        appointment.getSpecialty().getId(),
-                        pageable
-                );
+        Page<Doctor> doctors = doctorService.findBySpecialty(
+                appointment.getSpecialty().getId(),
+                pageable
+        );
+
+        LocalDate dataInicio = appointment.getDisponivelParaReagendamentoEm() != null
+                ? appointment.getDisponivelParaReagendamentoEm()
+                : LocalDate.now();
 
         Doctor melhorMedico = null;
         LocalDateTime melhorVaga = null;
 
         for (Doctor doctor : doctors) {
-
             Optional<LocalDateTime> vaga =
-                    encontrarPrimeiraVagaLivre(doctor);
+                    encontrarPrimeiraVagaLivre(doctor, dataInicio);
 
             if (vaga.isPresent()
-                    && (melhorVaga == null
-                    || vaga.get().isBefore(melhorVaga))) {
-
+                    && (melhorVaga == null || vaga.get().isBefore(melhorVaga))) {
                 melhorVaga = vaga.get();
                 melhorMedico = doctor;
             }
@@ -107,26 +108,32 @@ public class AppointmentService {
             appointment.setDate(melhorVaga.toLocalDate());
             appointment.setStartTime(melhorVaga.toLocalTime());
             appointment.setStatus(AppointmentStatus.PENDING);
-            return;
+            appointment.setDisponivelParaReagendamentoEm(null);
+        } else {
+            appointment.setStatus(AppointmentStatus.WAITING);
         }
-
-        appointment.setStatus(AppointmentStatus.WAITING);
     }
 
 
 
 
 
-    private Optional<LocalDateTime> encontrarPrimeiraVagaLivre(Doctor doctor) {
-        List<Schedule> schedules = scheduleService.findByDoctor(doctor.getId());
+    private Optional<LocalDateTime> encontrarPrimeiraVagaLivre(
+            Doctor doctor,
+            LocalDate dataInicio
+    ) {
+        List<Schedule> schedules =
+                scheduleService.findByDoctor(doctor.getId());
 
         LocalDate hoje = LocalDate.now();
-        LocalDate fimBusca = hoje.plusWeeks(8);
+        LocalDate inicioBusca = dataInicio.isAfter(hoje) ? dataInicio : hoje;
+        LocalDate fimBusca = inicioBusca.plusWeeks(8);
 
         return schedules.stream()
                 .flatMap(schedule -> {
                     LocalDate data = proximaDataDoDia(
-                            schedule.getDayOfWeek(), hoje
+                            schedule.getDayOfWeek(),
+                            inicioBusca
                     );
 
                     List<LocalDateTime> horarios = new ArrayList<>();
@@ -150,7 +157,7 @@ public class AppointmentService {
 
                             boolean horarioJaPassou =
                                     data.equals(hoje)
-                                            && hora.isBefore(LocalTime.now());
+                                            && !hora.isAfter(LocalTime.now());
 
                             if (!cruzaAlmoco && !horarioJaPassou) {
                                 horarios.add(LocalDateTime.of(data, hora));
@@ -213,30 +220,50 @@ public class AppointmentService {
 
     // chamado quando abrir vaga
 
+
     public void tentarAgendarFila(Pageable pageable) {
 
-        List<Appointment> fila =
-                appointmentRepository
-                        .findByStatusOrderByDataEntradaFilaAsc(
-                                AppointmentStatus.WAITING
-                        );
+        List<Appointment> fila = new ArrayList<>(
+                appointmentRepository.findByStatusOrderByDataEntradaFilaAsc(
+                        AppointmentStatus.WAITING
+                )
+        );
+
+        // Prioridade 0: primeira recusa.
+        // Prioridade 1: fila normal e recusas posteriores.
+        fila.sort(
+                Comparator.comparing(
+                        (Appointment a) -> a.getPrioridadeFila() == null
+                                ? 1
+                                : a.getPrioridadeFila()
+                ).thenComparing(Appointment::getDataEntradaFila)
+        );
 
         Pageable pageableTodos = PageRequest.of(0, Integer.MAX_VALUE);
 
         for (Appointment appointment : fila) {
 
+            LocalDate disponivelEm =
+                    appointment.getDisponivelParaReagendamentoEm();
+
+            // Não agenda pacientes antes da data permitida.
+            if (disponivelEm != null
+                    && disponivelEm.isAfter(LocalDate.now())) {
+                continue;
+            }
+
             tentarMarcarConsulta(appointment, pageableTodos);
 
-            if (appointment.getStatus() != AppointmentStatus.WAITING) {
-
+            if (appointment.getStatus() == AppointmentStatus.PENDING) {
                 appointmentRepository.save(appointment);
-
                 criarCallList(appointment);
 
+                // Uma vaga por paciente em cada processamento.
                 return;
             }
         }
     }
+
 
 
     public Appointment findByIdOrThrowRequestException(Long id) {
@@ -293,6 +320,7 @@ public class AppointmentService {
             }
         }
 
+
         // Paciente não confirmou a consulta.
         if (statusAnterior == AppointmentStatus.PENDING
                 && novoStatus == AppointmentStatus.WAITING) {
@@ -304,26 +332,33 @@ public class AppointmentService {
             tentativas++;
             appointment.setTentativasNaoConfirmadas(tentativas);
 
-            // Segunda falta: cancela e processa a fila.
-            if (tentativas >= 2) {
-                appointment.setStatus(AppointmentStatus.CANCELLED);
-                Appointment cancelada = appointmentRepository.save(appointment);
+            LocalDate hoje = LocalDate.now();
 
-                tentarAgendarFila(PageRequest.of(0, 10));
+            // Só poderá receber outra consulta na próxima segunda-feira.
+            LocalDate proximaSegunda = hoje.with(
+                    java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY)
+            );
 
-                return cancelada;
+            appointment.setStatus(AppointmentStatus.WAITING);
+            appointment.setDisponivelParaReagendamentoEm(proximaSegunda);
+
+            if (tentativas == 1) {
+                // Primeira recusa: prioridade máxima na fila.
+                appointment.setPrioridadeFila(0);
+            } else {
+                // Segunda recusa ou posterior: vai para o fim da fila.
+                appointment.setPrioridadeFila(1);
+                appointment.setDataEntradaFila(LocalDateTime.now());
             }
 
-            // Primeira falta: devolve ao final da fila.
-            appointment.setStatus(AppointmentStatus.WAITING);
-            appointment.setDataEntradaFila(LocalDateTime.now());
+            Appointment atualizada = appointmentRepository.save(appointment);
 
-            appointmentRepository.save(appointment);
+            // Libera a vaga para o próximo paciente elegível.
+            tentarAgendarFila(PageRequest.of(0, Integer.MAX_VALUE));
 
-            tentarAgendarFila(PageRequest.of(0, 10));
-
-            return appointment;
+            return atualizada;
         }
+
 
         appointmentMapper.updateFromDto(dto, appointment);
 
